@@ -469,8 +469,8 @@ function drawGraphic(ctx,W,H,P,idx){
 }
 function drawLogoCorner(ctx,W,H,img,pad,top){
   var iw=img.naturalWidth||img.width||1,ih=img.naturalHeight||img.height||1;
-  var w=W*0.22,h=w*(ih/iw);
-  ctx.save();ctx.globalAlpha=0.14;
+  var w=W*0.15,h=w*(ih/iw);
+  ctx.save();ctx.globalAlpha=0.13;
   ctx.drawImage(img,W-pad-w,top,w,h);
   ctx.restore();
 }
@@ -518,7 +518,7 @@ function drawSlide(cv,slide,idx,total){
   var hasProg=$('progress').value!=='off'&&total>1;
   var boxTop=pad+(hasProg?Math.round(H*0.032):0);
   if($('logoplace').value==='corner'&&LOGO_IMG)
-    drawLogoCorner(ctx,W,H,LOGO_IMG,pad,boxTop+Math.round(H*0.014));
+    drawLogoCorner(ctx,W,H,LOGO_IMG,pad,boxTop+Math.round(H*0.026));
   var boxL=pad,boxR=W-pad,boxH=H-boxTop-footH;
 
   var im=IMAGES[idx],mode=$('imgmode').value;
