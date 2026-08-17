@@ -780,14 +780,23 @@ function dlPdf(){
   }catch(e){toast('Could not build the PDF')}
 }
 
-/* ---------- export ---------- */
-function dlOne(i,single){
+/* ---------- export ----------
+   toBlob() + an object URL, not toDataURL(), because iOS Safari ignores the
+   download attribute on data: URIs — it just opens the image instead of
+   saving it. Blob URLs download properly there, same as the PDF export. */
+function dlOne(i,single,cb){
   try{
-    var a=document.createElement('a');
-    a.download='slide-'+String(i+1).padStart(2,'0')+'.png';
-    a.href=CANV[i].toDataURL('image/png');a.click();
-    if(single)afterDownload();
-  }catch(e){toast('Could not save that slide')}
+    CANV[i].toBlob(function(blob){
+      if(!blob){toast('Could not save that slide');if(cb)cb();return}
+      var url=URL.createObjectURL(blob);
+      var a=document.createElement('a');
+      a.download='slide-'+String(i+1).padStart(2,'0')+'.png';
+      a.href=url;a.click();
+      setTimeout(function(){URL.revokeObjectURL(url)},4000);
+      if(single)afterDownload();
+      if(cb)cb();
+    },'image/png');
+  }catch(e){toast('Could not save that slide');if(cb)cb()}
 }
 function dlAll(){
   if(!CANV.length)return;
@@ -795,8 +804,7 @@ function dlAll(){
   var i=0;
   (function next(){
     if(i>=CANV.length){afterDownload();return}
-    dlOne(i++,false);
-    setTimeout(next,420);   /* browsers throttle rapid-fire downloads */
+    dlOne(i++,false,function(){setTimeout(next,420)});   /* browsers throttle rapid-fire downloads */
   })();
 }
 function afterDownload(){
