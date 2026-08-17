@@ -467,11 +467,11 @@ function drawGraphic(ctx,W,H,P,idx){
     ctx.fillText(String(idx+1),W*0.99,H*0.99);ctx.textAlign='left';ctx.textBaseline='top'}
   ctx.restore();
 }
-function drawLogoCorner(ctx,W,H,img){
+function drawLogoCorner(ctx,W,H,img,pad,top){
   var iw=img.naturalWidth||img.width||1,ih=img.naturalHeight||img.height||1;
-  var w=W*0.34,h=w*(ih/iw);
-  ctx.save();ctx.globalAlpha=0.12;
-  ctx.drawImage(img,W*0.99-w,H*0.99-h,w,h);
+  var w=W*0.22,h=w*(ih/iw);
+  ctx.save();ctx.globalAlpha=0.14;
+  ctx.drawImage(img,W-pad-w,top,w,h);
   ctx.restore();
 }
 function drawProgress(ctx,W,H,P,idx,total){
@@ -513,11 +513,12 @@ function drawSlide(cv,slide,idx,total){
   else ctx.fillStyle=P.bg;
   ctx.fillRect(0,0,W,H);
   drawGraphic(ctx,W,H,P,idx);
-  if($('logoplace').value==='corner'&&LOGO_IMG)drawLogoCorner(ctx,W,H,LOGO_IMG);
 
   var footH=Math.round(H*0.10);
   var hasProg=$('progress').value!=='off'&&total>1;
   var boxTop=pad+(hasProg?Math.round(H*0.032):0);
+  if($('logoplace').value==='corner'&&LOGO_IMG)
+    drawLogoCorner(ctx,W,H,LOGO_IMG,pad,boxTop+Math.round(H*0.014));
   var boxL=pad,boxR=W-pad,boxH=H-boxTop-footH;
 
   var im=IMAGES[idx],mode=$('imgmode').value;
