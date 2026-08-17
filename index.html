@@ -231,7 +231,7 @@ Leave a blank line between slides — or paste a long block and it'll be split f
 <div class="bar"><div class="in">
   <div class="lab"><div class="k">Deck</div><div class="v" id="barLab">Nothing yet</div></div>
   <button class="btn g" type="button" onclick="dlPdf()" id="pdfBtn">PDF for LinkedIn</button>
-  <button class="btn" type="button" onclick="dlAll()" id="dlBtn">PNGs</button>
+  <button class="btn" type="button" onclick="dlAll()" id="dlBtn">All PNGs (.zip)</button>
 </div></div>
 
 <div class="toast" id="toast"></div>
@@ -770,42 +770,96 @@ function buildPdf(canvases){
 function dlPdf(){
   if(!CANV.length)return;
   try{
-    toast('Building your PDF…');
-    var blob=buildPdf(CANV);
-    var url=URL.createObjectURL(blob);
-    var a=document.createElement('a');
-    a.download='carousel.pdf';a.href=url;a.click();
-    setTimeout(function(){URL.revokeObjectURL(url)},4000);
+    saveBlob(buildPdf(CANV),'carousel.pdf');
     afterDownload();
   }catch(e){toast('Could not build the PDF')}
 }
 
 /* ---------- export ----------
-   toBlob() + an object URL, not toDataURL(), because iOS Safari ignores the
-   download attribute on data: URIs — it just opens the image instead of
-   saving it. Blob URLs download properly there, same as the PDF export. */
-function dlOne(i,single,cb){
+   iOS (Safari and every other browser there — Apple requires them all to run
+   on WebKit) only allows a download that fires synchronously, in the same
+   tick as the tap that started it. That rules out canvas.toBlob() (its
+   callback runs a tick late) and rules out a timer-driven loop of several
+   downloads — only the first ever counts as "caused by" the tap; the rest
+   get silently dropped. So: build PNG bytes synchronously (same atob()
+   trick as the PDF's jpegBytes), and for "save all" bundle every slide into
+   one zip — one file, one synchronous download — instead of many. */
+function pngBytes(cv){
+  var url=cv.toDataURL('image/png');
+  var b64=url.slice(url.indexOf(',')+1);
+  var bin=atob(b64),out=new Uint8Array(bin.length);
+  for(var i=0;i<bin.length;i++)out[i]=bin.charCodeAt(i);
+  return out;
+}
+var CRC_TABLE=(function(){
+  var t=[];
+  for(var n=0;n<256;n++){var c=n;for(var k=0;k<8;k++)c=(c&1)?(0xEDB88320^(c>>>1)):(c>>>1);t[n]=c>>>0}
+  return t;
+})();
+function crc32(buf){
+  var crc=0xFFFFFFFF;
+  for(var i=0;i<buf.length;i++)crc=CRC_TABLE[(crc^buf[i])&0xFF]^(crc>>>8);
+  return (crc^0xFFFFFFFF)>>>0;
+}
+function buildZip(files){
+  /* Minimal ZIP writer, store method (no compression) — PNGs barely
+     compress anyway, and this keeps it dependency-free. */
+  var chunks=[],len=0;
+  function put(b){chunks.push(b);len+=b.length}
+  function u16(n){return new Uint8Array([n&0xFF,(n>>>8)&0xFF])}
+  function u32(n){return new Uint8Array([n&0xFF,(n>>>8)&0xFF,(n>>>16)&0xFF,(n>>>24)&0xFF])}
+  function str(s){var a=new Uint8Array(s.length);for(var i=0;i<s.length;i++)a[i]=s.charCodeAt(i);return a}
+
+  var now=new Date();
+  var dt=((now.getHours()&0x1F)<<11)|((now.getMinutes()&0x3F)<<5)|((now.getSeconds()>>1)&0x1F);
+  var dd=(((now.getFullYear()-1980)&0x7F)<<9)|(((now.getMonth()+1)&0xF)<<5)|(now.getDate()&0x1F);
+  var central=[];
+
+  files.forEach(function(f){
+    var name=str(f.name),data=f.data,crc=crc32(data),start=len;
+    put(u32(0x04034b50));put(u16(20));put(u16(0));put(u16(0));
+    put(u16(dt));put(u16(dd));put(u32(crc));put(u32(data.length));put(u32(data.length));
+    put(u16(name.length));put(u16(0));put(name);put(data);
+
+    var c=[u32(0x02014b50),u16(20),u16(20),u16(0),u16(0),u16(dt),u16(dd),u32(crc),
+      u32(data.length),u32(data.length),u16(name.length),u16(0),u16(0),u16(0),u16(0),
+      u32(0),u32(start),name];
+    central.push(c);
+  });
+
+  var cdStart=len,cdSize=0;
+  central.forEach(function(c){c.forEach(function(p){put(p);cdSize+=p.length})});
+
+  put(u32(0x06054b50));put(u16(0));put(u16(0));
+  put(u16(files.length));put(u16(files.length));
+  put(u32(cdSize));put(u32(cdStart));put(u16(0));
+
+  var all=new Uint8Array(len),at=0;
+  chunks.forEach(function(c){all.set(c,at);at+=c.length});
+  return new Blob([all],{type:'application/zip'});
+}
+function saveBlob(blob,name){
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.download=name;a.href=url;a.click();
+  setTimeout(function(){URL.revokeObjectURL(url)},4000);
+}
+function dlOne(i,single){
   try{
-    CANV[i].toBlob(function(blob){
-      if(!blob){toast('Could not save that slide');if(cb)cb();return}
-      var url=URL.createObjectURL(blob);
-      var a=document.createElement('a');
-      a.download='slide-'+String(i+1).padStart(2,'0')+'.png';
-      a.href=url;a.click();
-      setTimeout(function(){URL.revokeObjectURL(url)},4000);
-      if(single)afterDownload();
-      if(cb)cb();
-    },'image/png');
-  }catch(e){toast('Could not save that slide');if(cb)cb()}
+    saveBlob(new Blob([pngBytes(CANV[i])],{type:'image/png'}),
+      'slide-'+String(i+1).padStart(2,'0')+'.png');
+    if(single)afterDownload();
+  }catch(e){toast('Could not save that slide')}
 }
 function dlAll(){
   if(!CANV.length)return;
-  toast('Saving '+CANV.length+' slides…');
-  var i=0;
-  (function next(){
-    if(i>=CANV.length){afterDownload();return}
-    dlOne(i++,false,function(){setTimeout(next,420)});   /* browsers throttle rapid-fire downloads */
-  })();
+  try{
+    var files=CANV.map(function(cv,i){
+      return {name:'slide-'+String(i+1).padStart(2,'0')+'.png',data:pngBytes(cv)};
+    });
+    saveBlob(buildZip(files),'carousel-slides.zip');
+    afterDownload();
+  }catch(e){toast('Could not build the zip')}
 }
 function afterDownload(){
   setTimeout(function(){toast('Carousel saved — check your downloads')},400);
