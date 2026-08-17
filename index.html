@@ -213,9 +213,17 @@ Leave a blank line between slides — or paste a long block and it'll be split f
           <div class="chips" id="themes"></div>
           <label>Accent</label>
           <div class="swatches" id="swatches"></div>
-          <div class="f" style="margin-top:13px"><label for="logo">Pull colours from your logo</label>
-            <input id="logo" type="file" accept="image/*" style="padding:8px">
-            <div class="hint" id="logoState">Upload a logo and its colours appear as swatches above.</div></div>
+          <div class="r2" style="margin-top:13px">
+            <div class="f"><label for="logo">Brand logo</label>
+              <input id="logo" type="file" accept="image/*" style="padding:8px"></div>
+            <div class="f"><label for="logoplace">Logo on slides</label>
+              <select id="logoplace">
+                <option value="off">Off</option>
+                <option value="footer">Footer mark</option>
+                <option value="corner">Corner watermark</option>
+              </select></div>
+          </div>
+          <div class="hint" id="logoState">Upload a logo — its colours become swatches above, and you can place it on your slides.</div>
         </div>
       </div>
     </div>
@@ -255,7 +263,7 @@ var THEMES=[
 var ACCENTS=['#3B2FD9','#131114','#0E6B5A','#B0344E','#C2643A','#5B2E86'];
 var WORD_LIMIT={statement:34,list:46,quote:32,stat:14,hook:16,cta:20};
 
-var ACC=ACCENTS[0],THEME='ink',SLIDES=[],CANV=[],IMAGES={},LOGO_COLS=[];
+var ACC=ACCENTS[0],THEME='ink',SLIDES=[],CANV=[],IMAGES={},LOGO_COLS=[],LOGO_IMG=null;
 var BRAND_KEY='carouselBrand';
 
 function $(i){return document.getElementById(i)}
@@ -266,7 +274,8 @@ function saveBrand(){
     localStorage.setItem(BRAND_KEY,JSON.stringify({
       handle:$('handle').value,ratio:$('ratio').value,typeface:$('typeface').value,
       icon:$('icon').value,graphic:$('graphic').value,imgmode:$('imgmode').value,
-      progress:$('progress').value,theme:THEME,acc:ACC,logoCols:LOGO_COLS
+      progress:$('progress').value,theme:THEME,acc:ACC,logoCols:LOGO_COLS,
+      logoplace:$('logoplace').value,logoImg:LOGO_IMG?LOGO_IMG.src:null
     }));
   }catch(e){}
 }
@@ -282,6 +291,7 @@ function applyBrand(b){
   if(b.graphic)$('graphic').value=b.graphic;
   if(b.imgmode)$('imgmode').value=b.imgmode;
   if(b.progress)$('progress').value=b.progress;
+  if(b.logoplace)$('logoplace').value=b.logoplace;
   if(b.theme)THEME=b.theme;
   if(b.acc)ACC=b.acc;
   if(Array.isArray(b.logoCols))LOGO_COLS=b.logoCols;
@@ -289,15 +299,21 @@ function applyBrand(b){
   paintSwatches();markTh();
   if(LOGO_COLS.length)$('logoState').textContent=
     LOGO_COLS.length+' colours from your saved brand — upload a logo again to refresh them.';
+  if(b.logoImg){
+    var li=new Image();
+    li.onload=function(){LOGO_IMG=li;render()};
+    li.src=b.logoImg;
+  }
 }
 function clearBrand(){
   try{localStorage.removeItem(BRAND_KEY)}catch(e){}
   $('handle').value='';$('ratio').value='4x5';$('typeface').value='grot';$('icon').value='dot';
   $('graphic').value='none';$('imgmode').value='top';$('progress').value='segments';
-  THEME='ink';ACC=ACCENTS[0];LOGO_COLS=[];
+  $('logoplace').value='off';
+  THEME='ink';ACC=ACCENTS[0];LOGO_COLS=[];LOGO_IMG=null;
   document.documentElement.style.setProperty('--acc',ACC);
   paintSwatches();markTh();
-  $('logoState').textContent='Upload a logo and its colours appear as swatches above.';
+  $('logoState').textContent='Upload a logo — its colours become swatches above, and you can place it on your slides.';
   render();toast('Brand reset');
 }
 
@@ -451,6 +467,13 @@ function drawGraphic(ctx,W,H,P,idx){
     ctx.fillText(String(idx+1),W*0.99,H*0.99);ctx.textAlign='left';ctx.textBaseline='top'}
   ctx.restore();
 }
+function drawLogoCorner(ctx,W,H,img){
+  var iw=img.naturalWidth||img.width||1,ih=img.naturalHeight||img.height||1;
+  var w=W*0.34,h=w*(ih/iw);
+  ctx.save();ctx.globalAlpha=0.12;
+  ctx.drawImage(img,W*0.99-w,H*0.99-h,w,h);
+  ctx.restore();
+}
 function drawProgress(ctx,W,H,P,idx,total){
   var mode=$('progress').value;
   if(mode==='off'||total<2)return;
@@ -490,6 +513,7 @@ function drawSlide(cv,slide,idx,total){
   else ctx.fillStyle=P.bg;
   ctx.fillRect(0,0,W,H);
   drawGraphic(ctx,W,H,P,idx);
+  if($('logoplace').value==='corner'&&LOGO_IMG)drawLogoCorner(ctx,W,H,LOGO_IMG);
 
   var footH=Math.round(H*0.10);
   var hasProg=$('progress').value!=='off'&&total>1;
@@ -592,11 +616,18 @@ function drawSlide(cv,slide,idx,total){
 
   ctx.strokeStyle=P.rule;ctx.lineWidth=2;
   ctx.beginPath();ctx.moveTo(pad,H-footH);ctx.lineTo(W-pad,H-footH);ctx.stroke();
+  var handleX=pad;
+  if($('logoplace').value==='footer'&&LOGO_IMG){
+    var liw=LOGO_IMG.naturalWidth||LOGO_IMG.width||1,lih=LOGO_IMG.naturalHeight||LOGO_IMG.height||1;
+    var lh=Math.round(footH*0.56),lw=Math.round(lh*(liw/lih));
+    ctx.drawImage(LOGO_IMG,pad,H-footH/2-lh/2,lw,lh);
+    handleX=pad+lw+Math.round(W*0.018);
+  }
   ctx.fillStyle=P.dim;
   ctx.font='500 '+Math.round(W*0.026)+'px "'+F.body+'", sans-serif';
   ctx.textBaseline='middle';ctx.textAlign='left';
   var hh=($('handle').value||'').trim();
-  if(hh)ctx.fillText(hh,pad,H-footH/2+2);
+  if(hh)ctx.fillText(hh,handleX,H-footH/2+2);
   ctx.textAlign='right';ctx.fillText((idx+1)+' / '+total,W-pad,H-footH/2+2);
 }
 
@@ -929,17 +960,30 @@ step('logo',function(){
         LOGO_COLS=logoPalette(img);
         $('logoState').textContent=LOGO_COLS.length
           ? LOGO_COLS.length+' colours pulled from your logo — they’re the last swatches above.'
-          : 'Couldn’t find a strong colour in that logo.';
+          : 'Added your logo to your slides — no strong accent colour found in it though.';
         paintSwatches();
-        if(LOGO_COLS.length)setAcc(LOGO_COLS[0]);else saveBrand();
+        /* Shrink before keeping it around — it's only ever drawn small on a
+           slide, and a shrunk copy is what gets saved to the browser too. */
+        var c=document.createElement('canvas'),maxDim=240;
+        var scale=Math.min(1,maxDim/Math.max(img.naturalWidth||img.width,img.naturalHeight||img.height));
+        c.width=Math.max(1,Math.round((img.naturalWidth||img.width)*scale));
+        c.height=Math.max(1,Math.round((img.naturalHeight||img.height)*scale));
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height);
+        var li=new Image();
+        li.onload=function(){
+          LOGO_IMG=li;
+          if($('logoplace').value==='off')$('logoplace').value='footer';
+          if(LOGO_COLS.length)setAcc(LOGO_COLS[0]);else{render();saveBrand()}
+        };
+        li.src=c.toDataURL('image/png');
       };
       img.src=fr.result};
     fr.readAsDataURL(f);
   });
 });
 step('inputs',function(){
-  var BRAND_FIELDS={handle:1,ratio:1,typeface:1,icon:1,graphic:1,imgmode:1,progress:1};
-  ['copy','hook','cta','handle','ratio','typeface','icon','graphic','imgmode','progress']
+  var BRAND_FIELDS={handle:1,ratio:1,typeface:1,icon:1,graphic:1,imgmode:1,progress:1,logoplace:1};
+  ['copy','hook','cta','handle','ratio','typeface','icon','graphic','imgmode','progress','logoplace']
     .forEach(function(id){
       $(id).addEventListener('input',render);
       $(id).addEventListener('change',render);
