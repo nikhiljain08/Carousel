@@ -167,7 +167,8 @@ Leave a blank line between slides — or paste a long block and it'll be split f
       </div>
 
       <div class="card">
-        <div class="hd"><span>Your brand</span></div>
+        <div class="hd"><span>Your brand</span>
+          <button class="btn g s" type="button" onclick="clearBrand()">Reset brand</button></div>
         <div class="bd">
           <div class="r2">
             <div class="f"><label for="handle">Handle</label><input id="handle" placeholder="@yourhandle"></div>
@@ -223,7 +224,8 @@ Leave a blank line between slides — or paste a long block and it'll be split f
   </div>
 
   <div class="foot">Everything renders in your browser. Your writing and images are never
-    uploaded.<br>Free forever, no watermark, no export limits.</div>
+    uploaded.<br>Your brand kit (colours, look, handle) is remembered on this device only.<br>
+    Free forever, no watermark, no export limits.</div>
 </div>
 
 <div class="bar"><div class="in">
@@ -254,8 +256,50 @@ var ACCENTS=['#3B2FD9','#131114','#0E6B5A','#B0344E','#C2643A','#5B2E86'];
 var WORD_LIMIT={statement:34,list:46,quote:32,stat:14,hook:16,cta:20};
 
 var ACC=ACCENTS[0],THEME='ink',SLIDES=[],CANV=[],IMAGES={},LOGO_COLS=[];
+var BRAND_KEY='carouselBrand';
 
 function $(i){return document.getElementById(i)}
+
+/* ---------- brand kit (persisted locally, never leaves the device) ---------- */
+function saveBrand(){
+  try{
+    localStorage.setItem(BRAND_KEY,JSON.stringify({
+      handle:$('handle').value,ratio:$('ratio').value,typeface:$('typeface').value,
+      icon:$('icon').value,graphic:$('graphic').value,imgmode:$('imgmode').value,
+      progress:$('progress').value,theme:THEME,acc:ACC,logoCols:LOGO_COLS
+    }));
+  }catch(e){}
+}
+function loadBrand(){
+  try{var raw=localStorage.getItem(BRAND_KEY);return raw?JSON.parse(raw):null}catch(e){return null}
+}
+function applyBrand(b){
+  if(!b)return;
+  if(b.handle!=null)$('handle').value=b.handle;
+  if(b.ratio)$('ratio').value=b.ratio;
+  if(b.typeface)$('typeface').value=b.typeface;
+  if(b.icon)$('icon').value=b.icon;
+  if(b.graphic)$('graphic').value=b.graphic;
+  if(b.imgmode)$('imgmode').value=b.imgmode;
+  if(b.progress)$('progress').value=b.progress;
+  if(b.theme)THEME=b.theme;
+  if(b.acc)ACC=b.acc;
+  if(Array.isArray(b.logoCols))LOGO_COLS=b.logoCols;
+  document.documentElement.style.setProperty('--acc',ACC);
+  paintSwatches();markTh();
+  if(LOGO_COLS.length)$('logoState').textContent=
+    LOGO_COLS.length+' colours from your saved brand — upload a logo again to refresh them.';
+}
+function clearBrand(){
+  try{localStorage.removeItem(BRAND_KEY)}catch(e){}
+  $('handle').value='';$('ratio').value='4x5';$('typeface').value='grot';$('icon').value='dot';
+  $('graphic').value='none';$('imgmode').value='top';$('progress').value='segments';
+  THEME='ink';ACC=ACCENTS[0];LOGO_COLS=[];
+  document.documentElement.style.setProperty('--acc',ACC);
+  paintSwatches();markTh();
+  $('logoState').textContent='Upload a logo and its colours appear as swatches above.';
+  render();toast('Brand reset');
+}
 
 /* ---------- colour ---------- */
 function hexRgb(h){h=String(h).replace('#','');
@@ -791,7 +835,7 @@ function paintSwatches(){
       '" onclick="setAcc(\''+c+'\')" aria-label="Accent colour"></button>'}).join('');
   markSw();
 }
-function setAcc(c){ACC=c;document.documentElement.style.setProperty('--acc',c);markSw();markTh();render()}
+function setAcc(c){ACC=c;document.documentElement.style.setProperty('--acc',c);markSw();markTh();render();saveBrand()}
 
 step('fonts list',function(){
   $('typeface').innerHTML=Object.keys(FONTS).map(function(k){
@@ -805,11 +849,14 @@ step('icons',function(){
 step('themes',function(){
   $('themes').innerHTML=THEMES.map(function(t){
     return '<button class="chip" type="button" data-t="'+t[0]+'" onclick="THEME=\''+t[0]+
-      '\';markTh();render()"><span class="sw" style="background:'+t[2]+'"></span>'+
+      '\';markTh();render();saveBrand()"><span class="sw" style="background:'+t[2]+'"></span>'+
       '<span class="nm">'+t[1]+'</span></button>'}).join('');
 });
 step('swatches',function(){
   document.documentElement.style.setProperty('--acc',ACC);paintSwatches();
+});
+step('brand',function(){
+  applyBrand(loadBrand());
 });
 step('logo',function(){
   $('logo').addEventListener('change',function(e){
@@ -822,17 +869,22 @@ step('logo',function(){
           ? LOGO_COLS.length+' colours pulled from your logo — they’re the last swatches above.'
           : 'Couldn’t find a strong colour in that logo.';
         paintSwatches();
-        if(LOGO_COLS.length)setAcc(LOGO_COLS[0]);
+        if(LOGO_COLS.length)setAcc(LOGO_COLS[0]);else saveBrand();
       };
       img.src=fr.result};
     fr.readAsDataURL(f);
   });
 });
 step('inputs',function(){
+  var BRAND_FIELDS={handle:1,ratio:1,typeface:1,icon:1,graphic:1,imgmode:1,progress:1};
   ['copy','hook','cta','handle','ratio','typeface','icon','graphic','imgmode','progress']
     .forEach(function(id){
       $(id).addEventListener('input',render);
       $(id).addEventListener('change',render);
+      if(BRAND_FIELDS[id]){
+        $(id).addEventListener('input',saveBrand);
+        $(id).addEventListener('change',saveBrand);
+      }
     });
 });
 step('marks',function(){markTh();markSw()});
